@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-@author: Nemanja Masala
+Script to play around with implementing Tikhonov-regularized image 
+reconstruction
+
+Based on the tutorial, "Biomedical Image Reconstruction—From Foundations To 
+Deep Neural Networks," given by Michaël Unser and Pol del Aguila Pla at 
+ICASSP20. Video and slides can be found at: https://poldap.github.io/#/talks
+
+@author: Nemanja Masala, 02.04.2025
 """
 
 # IMPORTS
@@ -13,8 +20,9 @@ import os as os
 
 class myTikhImRegDemo(object):
     '''
-    A class for playing around with implementing Tikhonov-regularized image 
-    reconstructions
+    A class for implementing Tikhonov-regularized image 
+    reconstructions. This does not follow best OOP practices or numerical 
+    practices or anything else.
     '''
     '''
     @staticmethod()   
@@ -40,7 +48,7 @@ class myTikhImRegDemo(object):
             + np.random.normal(0, self.gaussianSD, self.im.shape)
         
     def vectorize(self, arrIm):
-        # stack column-wise
+        # stack column-wise ('F')
         # this outputs a row vector, not a coumn vector
         return arrIm.flatten('F')
         
@@ -48,6 +56,8 @@ class myTikhImRegDemo(object):
         return np.reshape( arrIm, self.nativeSize, 'F' )
         
     def computeH(self):
+        # I ignore imaging physics here, so H is set to the identity and the 
+        # can therefore only refine the (final) image
         self.H = np.eye( self.numEl )
         
     def computeL(self):
@@ -61,7 +71,7 @@ class myTikhImRegDemo(object):
             laplacianTempl = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
             delta = np.intp(laplacianTempl.shape[1] / 2)
             
-            # populate each row of this matrix with vectorized Laplacian kernel
+            # populate each row of L with vectorized Laplacian kernel
             for ii in range(0, self.numEl):
                 arrtmp = np.zeros(self.nativeSize)
                 
@@ -101,7 +111,7 @@ class myTikhImRegDemo(object):
             quit()
             
     def computeLargeMtx(self):
-        
+        # compute H_T*H + lambd*L*L_T
         self.largeMtx = np.dot(self.H.transpose(), self.H) + \
             self.lambd * np.dot(self.L.transpose(), self.L)
                 
@@ -128,7 +138,8 @@ class myTikhImRegDemo(object):
         
     def computeDirectSoln(self):
         '''
-        Compute direct solution
+        Compute direct solution. Implements the equation 
+        s = (H_T*H + lambd*L*L_T)^-1 * H_T * y, y being the acquired image
 
         Returns
         -------
@@ -189,7 +200,7 @@ class myTikhImRegDemo(object):
         ''
 
 # veriables
-mainDir = r''
+mainDir = r'.'
 imgFilename = 'walkbridge.tiff'
 
 imPath = r'{}\{}'.format(mainDir, imgFilename)
@@ -203,12 +214,13 @@ imageIm = pil.Image.open( imPath )
 # get some info and display
 print('Image dimensions are: {:d} x {:d}' \
       .format(imageIm.size[0], imageIm.size[1]) )
-#imageIm.show() # pops up image in Windows dialog box
+# I prefer using matplotlib's plotting functionality over that of PIL because
+# imageIm.show() will pop up the image in a separate dialog box
 f0 = plt.figure()
 ax = f0.add_subplot(1, 2, 1)
 ax.imshow(np.array( imageIm ), cmap='Greys')
 
-# crop to have reasonable array sizes for Tikhonov regularizer
+# crop to have reasonable array sizes for computation
 cropScalar = 0.15
 imageIm = imageIm.crop([100, 100, 100+int(cropScalar * imageIm.size[0]), \
                         100+int(cropScalar * imageIm.size[1])])
@@ -216,7 +228,6 @@ imageIm = imageIm.crop([100, 100, 100+int(cropScalar * imageIm.size[0]), \
 # get some info and display
 print('Image dimensions are: {:d} x {:d}' \
       .format(imageIm.size[0], imageIm.size[1]) )
-#imageIm.show()
 ax = f0.add_subplot(1, 2, 2)
 ax.imshow(np.array( imageIm ), cmap='Greys')
 
@@ -228,5 +239,9 @@ tikhObj = myTikhImRegDemo(arrIm, 10)
 
 tikhObj.computeDirectSoln()
 
+# default regularization weight did not change much, so let's try increasing it
 tikhObj.lambd = .1
 tikhObj.computeDirectSoln()
+# this increases SNR in the wooden plank region but decreases it (re: the loss
+# of detail) in the branches. This tradeoff is due to the objective function
+# acting on the entire image
